@@ -9,7 +9,7 @@ Verbesserungsvorschlägen.
 ## Funktionen
 
 - 🎙️ **Echtzeit-Sprachgespräch** über die Web Speech API (Speech-to-Text `de-DE`)
-- 🔊 **Natürliche deutsche Sprachausgabe** (Text-to-Speech)
+- 🔊 **Natürliche deutsche Sprachausgabe** über **ElevenLabs** (mit automatischem Browser-TTS-Fallback)
 - ⏱️ **5-Minuten-Timer** – der Beenden-Button wird erst nach Ablauf aktiv
 - 🧠 **Adaptiver Gesprächsverlauf** – die KI reagiert inhaltlich auf jede Aussage
 - 📊 **Analyse-Dashboard** mit allen 7 Dimensionen, Gesamtscore und Sternebewertung
@@ -37,7 +37,22 @@ Browser landet.
 
 - `POST /api/chat` — nächste Gesprächsantwort des Coaches
 - `POST /api/analyze` — vollständige Sprachanalyse als JSON
+- `POST /api/tts` — Sprachausgabe via ElevenLabs (liefert `audio/mpeg`)
 - `GET /api/health` — Statusendpunkt (auch für Render Health-Check)
+
+### Sprachausgabe (ElevenLabs)
+
+Für eine natürliche Stimme werden zwei Umgebungsvariablen benötigt:
+
+| Variable | Bedeutung |
+|----------|-----------|
+| `ELEVENLABS_API_KEY`  | Dein ElevenLabs API-Key |
+| `ELEVENLABS_VOICE_ID` | Die ID der gewünschten Stimme |
+| `ELEVENLABS_MODEL`    | optional, Standard `eleven_multilingual_v2` |
+
+Der Server erkennt die Werte zusätzlich anhand aller `ELEVEN*`-Variablen, falls
+die Benennung leicht abweicht. Ist ElevenLabs nicht konfiguriert, fällt die
+Anwendung automatisch auf die deutsche Browser-Stimme zurück.
 
 ## Lokal starten
 

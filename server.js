@@ -19,6 +19,48 @@ const CHAT_MODEL = process.env.CHAT_MODEL || "claude-sonnet-5";
 const ANALYSIS_MODEL = process.env.ANALYSIS_MODEL || "claude-sonnet-5";
 const ANTHROPIC_VERSION = "2023-06-01";
 
+// ElevenLabs (Text-to-Speech) – Voice-ID und API-Key aus der Umgebung.
+const ELEVEN_MODEL = process.env.ELEVENLABS_MODEL || "eleven_multilingual_v2";
+const ELEVEN_TTS_URL = "https://api.elevenlabs.io/v1/text-to-speech";
+
+// Ermittelt API-Key und Voice-ID robust aus allen ELEVEN*-Variablen,
+// da die exakte Benennung im Environment variieren kann.
+function resolveElevenConfig() {
+  let apiKey =
+    process.env.ELEVENLABS_API_KEY ||
+    process.env.ELEVEN_LABS_API_KEY ||
+    process.env.ELEVENLABS_KEY ||
+    process.env.XI_API_KEY ||
+    "";
+  let voiceId =
+    process.env.ELEVENLABS_VOICE_ID ||
+    process.env.ELEVEN_LABS_VOICE_ID ||
+    process.env.ELEVENLABS_VOICE ||
+    "";
+
+  if (!apiKey || !voiceId) {
+    const entries = Object.entries(process.env).filter(
+      ([k, v]) => /eleven/i.test(k) && v
+    );
+    // 1) Nach Namen klassifizieren.
+    for (const [k, v] of entries) {
+      if (!voiceId && /voice/i.test(k)) voiceId = v;
+      else if (!apiKey && /(api|key|token|secret)/i.test(k)) apiKey = v;
+    }
+    // 2) Letzter Ausweg: nach Wertform klassifizieren
+    //    (Voice-IDs sind kurze alphanumerische IDs, Keys beginnen mit "sk_" o. ä.).
+    if (!apiKey || !voiceId) {
+      for (const [, v] of entries) {
+        const looksLikeKey =
+          /^(sk_|xi-)/i.test(v) || v.length > 40 || v.includes("_");
+        if (looksLikeKey && !apiKey) apiKey = v;
+        else if (!looksLikeKey && !voiceId) voiceId = v;
+      }
+    }
+  }
+  return { apiKey, voiceId };
+}
+
 // ----------------------------------------------------------------------------
 // System-Prompts
 // ----------------------------------------------------------------------------
@@ -221,8 +263,64 @@ function extractJson(text) {
   }
 }
 
+// ----------------------------------------------------------------------------
+// Text-to-Speech via ElevenLabs (Server-Proxy, damit der Key im Backend bleibt)
+// ----------------------------------------------------------------------------
+app.post("/api/tts", async (req, res) => {
+  const { text } = req.body || {};
+  const { apiKey, voiceId } = resolveElevenConfig();
+
+  if (!apiKey || !voiceId) {
+    return res
+      .status(503)
+      .json({ error: "ElevenLabs ist nicht konfiguriert.", code: "NO_TTS" });
+  }
+  if (!text || !text.trim()) {
+    return res.status(400).json({ error: "Kein Text übergeben." });
+  }
+
+  try {
+    const r = await fetch(`${ELEVEN_TTS_URL}/${encodeURIComponent(voiceId)}`, {
+      method: "POST",
+      headers: {
+        "xi-api-key": apiKey,
+        "content-type": "application/json",
+        accept: "audio/mpeg",
+      },
+      body: JSON.stringify({
+        text: text.slice(0, 2500),
+        model_id: ELEVEN_MODEL,
+        voice_settings: {
+          stability: 0.5,
+          similarity_boost: 0.75,
+          style: 0.0,
+          use_speaker_boost: true,
+        },
+      }),
+    });
+
+    if (!r.ok) {
+      const body = await r.text();
+      console.error(`ElevenLabs-Fehler ${r.status}: ${body}`);
+      return res.status(502).json({ error: `ElevenLabs ${r.status}` });
+    }
+    const buf = Buffer.from(await r.arrayBuffer());
+    res.setHeader("content-type", "audio/mpeg");
+    res.setHeader("cache-control", "no-store");
+    res.send(buf);
+  } catch (e) {
+    console.error("tts error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get("/api/health", (_req, res) => {
-  res.json({ status: "ok", aiConfigured: Boolean(ANTHROPIC_API_KEY) });
+  const { apiKey, voiceId } = resolveElevenConfig();
+  res.json({
+    status: "ok",
+    aiConfigured: Boolean(ANTHROPIC_API_KEY),
+    ttsConfigured: Boolean(apiKey && voiceId),
+  });
 });
 
 const PORT = process.env.PORT || 3000;
@@ -231,6 +329,14 @@ app.listen(PORT, () => {
   if (!ANTHROPIC_API_KEY) {
     console.warn(
       "⚠  ANTHROPIC_API_KEY nicht gesetzt – Gespräch läuft im Fallback-Modus, Analyse ist deaktiviert."
+    );
+  }
+  const { apiKey, voiceId } = resolveElevenConfig();
+  if (apiKey && voiceId) {
+    console.log(`🔊 ElevenLabs aktiv (Voice ${voiceId.slice(0, 6)}…, Modell ${ELEVEN_MODEL}).`);
+  } else {
+    console.warn(
+      "⚠  ElevenLabs nicht konfiguriert – Sprachausgabe nutzt die Browser-Stimme."
     );
   }
 });

@@ -49,6 +49,8 @@
     userWordCount: 0,
     userSpeakingSec: 0,
     lastUserStart: null,
+    ttsAvailable: false, // ElevenLabs serverseitig konfiguriert?
+    currentAudio: null,  // laufende ElevenLabs-Wiedergabe
   };
 
   // ---------- Speech-Verfügbarkeit ----------
@@ -86,9 +88,56 @@
   }
 
   // ===================================================================
-  //  Text-to-Speech
+  //  Text-to-Speech — ElevenLabs (bevorzugt) mit Browser-Fallback
   // ===================================================================
-  function speak(text) {
+  async function speak(text) {
+    if (!text || !text.trim()) return;
+    // 1) ElevenLabs versuchen, falls serverseitig konfiguriert.
+    if (state.ttsAvailable) {
+      try {
+        setStatus("speaking");
+        const res = await fetch("/api/tts", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+        if (res.ok) {
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          const played = await playAudio(url, text);
+          URL.revokeObjectURL(url);
+          if (played) return;
+          // Wiedergabe blockiert → einmalig Browser-TTS, aber ElevenLabs
+          // grundsätzlich aktiv lassen.
+          return browserSpeak(text);
+        }
+        // 503/andere Fehler → dauerhaft auf Browser-TTS umschalten.
+        if (res.status === 503) state.ttsAvailable = false;
+      } catch (_) {
+        // Netzwerkfehler → Fallback
+      }
+    }
+    // 2) Fallback: Browser-Sprachsynthese.
+    return browserSpeak(text);
+  }
+
+  // Spielt die Audio-URL ab. Auflösung: true = erfolgreich abgespielt,
+  // false = Wiedergabe wurde blockiert (Aufrufer soll Fallback nutzen).
+  function playAudio(url) {
+    return new Promise((resolve) => {
+      stopSpeaking();
+      const audio = new Audio(url);
+      state.currentAudio = audio;
+      setStatus("speaking");
+      audio.onended = () => { state.currentAudio = null; resolve(true); };
+      audio.onerror = () => { state.currentAudio = null; resolve(true); };
+      audio.play()
+        .then(() => { /* läuft; Auflösung via onended */ })
+        .catch(() => { state.currentAudio = null; resolve(false); });
+    });
+  }
+
+  function browserSpeak(text) {
     return new Promise((resolve) => {
       if (!synth) { resolve(); return; }
       synth.cancel();
@@ -102,6 +151,15 @@
       utter.onerror = () => resolve();
       synth.speak(utter);
     });
+  }
+
+  // Stoppt jede laufende Sprachausgabe (ElevenLabs-Audio oder Browser-TTS).
+  function stopSpeaking() {
+    if (state.currentAudio) {
+      try { state.currentAudio.pause(); } catch (_) {}
+      state.currentAudio = null;
+    }
+    if (synth) synth.cancel();
   }
 
   // ===================================================================
@@ -266,7 +324,7 @@
     if (state.recognizing) {
       recognition.stop();
     } else {
-      if (synth) synth.cancel();
+      stopSpeaking();
       try { recognition.start(); } catch (_) { /* bereits laufend */ }
     }
   }
@@ -285,6 +343,13 @@
       }
     }
     recognition = setupRecognition();
+    // TTS-Verfügbarkeit klären (ElevenLabs?).
+    try {
+      const h = await fetch("/api/health").then((r) => r.json());
+      state.ttsAvailable = Boolean(h.ttsConfigured);
+    } catch (_) {
+      state.ttsAvailable = false;
+    }
     showView("conversation");
     startTimer();
     setStatus("idle");
@@ -296,7 +361,7 @@
     if (state.ended) return;
     state.ended = true;
     if (state.recognizing && recognition) recognition.stop();
-    if (synth) synth.cancel();
+    stopSpeaking();
     clearInterval(state.timerId);
     el.btnMic.disabled = true;
     el.btnEnd.disabled = true;
