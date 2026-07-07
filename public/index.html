@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>D+J Consult SprachCoach — Professionelle Sprachanalyse</title>
+  <meta name="description" content="Professionelle Sprachanalyse von D+J Consult – entdecken Sie Ihr volles sprachliches Potenzial." />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+
+    <!-- ============================ STARTSEITE ============================ -->
+    <section id="view-start" class="view container active">
+      <div class="logo-wrap">
+        <svg viewBox="0 0 800 300" xmlns="http://www.w3.org/2000/svg" class="logo" aria-label="D+J Consult">
+          <g transform="translate(50, 50)">
+            <path d="M 20 20 Q 80 10, 140 20 L 140 180 Q 80 170, 20 180 Z" fill="none" stroke="#c9a961" stroke-width="8"/>
+            <path d="M 180 20 Q 120 10, 60 20 L 60 180 Q 120 170, 180 180 Z" fill="none" stroke="#c9a961" stroke-width="8"/>
+            <line x1="100" y1="20" x2="100" y2="180" stroke="#c9a961" stroke-width="6"/>
+          </g>
+          <text x="280" y="140" font-family="Arial, sans-serif" font-size="72" font-weight="300" fill="#2a2a2a">D+J</text>
+          <text x="480" y="140" font-family="Arial, sans-serif" font-size="72" font-weight="300" fill="#2a2a2a">Consult</text>
+          <text x="280" y="190" font-family="Arial, sans-serif" font-size="28" font-weight="300" letter-spacing="8" fill="#2a2a2a">ZIELE ERREICHEN</text>
+        </svg>
+      </div>
+
+      <h1>Professionelle Sprachanalyse</h1>
+      <p class="subtitle">Entdecken Sie Ihr volles sprachliches Potenzial</p>
+
+      <div class="highlight-box">
+        <p>In einem natürlichen, mindestens fünfminütigen Gespräch analysiert der D+J SprachCoach Ihre Kommunikation über <strong>sieben Dimensionen</strong> – von Stimme und Wortschatz bis zu Rhetorik und emotionaler Intelligenz. Anschließend erhalten Sie eine detaillierte Auswertung mit sofort umsetzbaren Verbesserungsvorschlägen.</p>
+      </div>
+
+      <div class="feature-cards">
+        <div class="card">
+          <div class="card-icon">🎙️</div>
+          <h3>Natürliches Gespräch</h3>
+          <p>Sprechen Sie frei mit Ihrem virtuellen Gesprächspartner – adaptiv und in Echtzeit.</p>
+        </div>
+        <div class="card">
+          <div class="card-icon">📊</div>
+          <h3>7 Dimensionen</h3>
+          <p>Umfassende Analyse von Prosodie, Wortschatz, Syntax, Pragmatik, Rhetorik und mehr.</p>
+        </div>
+        <div class="card">
+          <div class="card-icon">🎯</div>
+          <h3>Konkrete Tipps</h3>
+          <p>Sofort umsetzbare Übungen, individuell auf Ihre Stärken und Entwicklungsfelder zugeschnitten.</p>
+        </div>
+      </div>
+
+      <div class="privacy-note">
+        <strong>🔒 Datenschutzhinweis</strong>
+        <p>Diese Sprachanalyse dient ausschließlich der Verbesserung Ihrer kommunikativen Fähigkeiten. Ihre Daten werden nur für die Analyse dieses Gesprächs verwendet, nicht an Dritte weitergegeben und nach Abschluss der Session nicht dauerhaft gespeichert. Mit dem Start des Gesprächs stimmen Sie der Aufzeichnung und Analyse zu.</p>
+      </div>
+
+      <button id="btn-start" class="btn btn-primary btn-large">Gespräch starten</button>
+      <p class="mic-hint">🎤 Bitte erlauben Sie den Zugriff auf Ihr Mikrofon, sobald Sie dazu aufgefordert werden.</p>
+      <p id="browser-warning" class="browser-warning" hidden>⚠️ Für die Spracherkennung empfehlen wir <strong>Google Chrome</strong> oder <strong>Microsoft Edge</strong> am Desktop.</p>
+    </section>
+
+    <!-- ========================= GESPRÄCHSANSICHT ========================= -->
+    <section id="view-conversation" class="view container">
+      <div class="conv-header">
+        <div class="conv-brand">D+J <span>SprachCoach</span></div>
+        <div class="timer" id="timer">05:00</div>
+      </div>
+
+      <div class="avatar-zone">
+        <div class="avatar" id="avatar">
+          <svg viewBox="0 0 100 100" width="72" height="72" aria-hidden="true">
+            <circle cx="50" cy="36" r="20" fill="#c9a961"/>
+            <path d="M18 84 Q50 58 82 84 Z" fill="#c9a961"/>
+          </svg>
+        </div>
+        <div class="waveform" id="waveform" aria-hidden="true">
+          <span></span><span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <div class="status-line" id="status-line">Bereit …</div>
+      </div>
+
+      <div class="transcript-toggle">
+        <label class="switch">
+          <input type="checkbox" id="toggle-transcript" />
+          <span>Live-Transkription einblenden</span>
+        </label>
+      </div>
+
+      <div class="live-transcript" id="live-transcript" hidden></div>
+
+      <div class="conv-controls">
+        <button id="btn-mic" class="btn btn-round" title="Mikrofon">
+          <span id="mic-label">🎤 Sprechen</span>
+        </button>
+        <button id="btn-end" class="btn btn-secondary" disabled>Gespräch beenden</button>
+      </div>
+      <p class="conv-hint" id="conv-hint">Das Gespräch muss mindestens 5 Minuten dauern. Der Beenden-Button wird danach aktiv.</p>
+    </section>
+
+    <!-- ======================== ANALYSE / ERGEBNIS ======================== -->
+    <section id="view-analysis" class="view container">
+      <div id="analysis-loading" class="analysis-loading">
+        <div class="spinner"></div>
+        <h2>Ihre Sprachanalyse wird erstellt …</h2>
+        <p>Der D+J SprachCoach wertet Ihr Gespräch über alle sieben Dimensionen aus. Einen Moment bitte.</p>
+      </div>
+
+      <div id="analysis-error" class="analysis-error" hidden></div>
+
+      <div id="analysis-content" hidden></div>
+
+      <div class="analysis-footer" id="analysis-footer" hidden>
+        <button id="btn-export" class="btn btn-secondary">📄 Als PDF exportieren</button>
+        <button id="btn-restart" class="btn btn-primary">Neues Gespräch</button>
+      </div>
+    </section>
+
+    <footer class="app-footer">
+      D+J Consult&nbsp;|&nbsp;ZIELE ERREICHEN&nbsp;·&nbsp;<a href="https://www.djconsult.de" target="_blank" rel="noopener">www.djconsult.de</a>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

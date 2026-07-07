@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: dj-sprachcoach
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: CHAT_MODEL
+        value: claude-sonnet-5
+      - key: ANALYSIS_MODEL
+        value: claude-sonnet-5
+      - key: NODE_VERSION
+        value: 20.11.1
+    healthCheckPath: /api/health
