@@ -20,8 +20,11 @@
     statusLine: document.getElementById("status-line"),
     toggleTranscript: document.getElementById("toggle-transcript"),
     liveTranscript: document.getElementById("live-transcript"),
-    btnMic: document.getElementById("btn-mic"),
-    micLabel: document.getElementById("mic-label"),
+    btnRecord: document.getElementById("btn-record"),
+    recordLabel: document.getElementById("record-label"),
+    btnSend: document.getElementById("btn-send"),
+    draftBox: document.getElementById("draft-box"),
+    draftText: document.getElementById("draft-text"),
     btnEnd: document.getElementById("btn-end"),
     convHint: document.getElementById("conv-hint"),
     analysisLoading: document.getElementById("analysis-loading"),
@@ -44,7 +47,10 @@
     startTime: null,
     elapsed: 0,
     timerId: null,
-    recognizing: false,
+    recognizing: false,  // Spracherkennung läuft technisch
+    recording: false,    // Nutzer ist im (selbstbestimmten) Aufnahmemodus
+    pendingSend: false,  // Abschicken wartet auf sauberes Ende der Erkennung
+    draft: "",           // bisher erkannter Text des aktuellen Redebeitrags
     ended: false,
     userWordCount: 0,
     userSpeakingSec: 0,
@@ -227,7 +233,8 @@
   // ===================================================================
   async function coachTurn(phase) {
     setStatus("thinking");
-    el.btnMic.disabled = true;
+    el.btnRecord.disabled = true;
+    el.btnSend.disabled = true;
     let reply;
     try {
       const res = await fetch("/api/chat", {
@@ -245,7 +252,8 @@
     await speak(reply);
     setStatus("idle");
     if (!state.ended) {
-      el.btnMic.disabled = false;
+      el.btnRecord.disabled = false;
+      el.statusLine.textContent = "Sie sind dran – tippen Sie auf „Aufnahme starten“.";
     }
     return reply;
   }
@@ -262,70 +270,130 @@
   }
 
   // ===================================================================
-  //  Spracherkennung (STT)
+  //  Spracherkennung (STT) — kontinuierlich, vom Nutzer gesteuert
   // ===================================================================
+  let currentInterim = "";
+
   function setupRecognition() {
     if (!SpeechRecognition) return null;
     const rec = new SpeechRecognition();
     rec.lang = "de-DE";
-    rec.continuous = false;
+    rec.continuous = true;      // läuft weiter – bricht nicht bei Sprechpausen ab
     rec.interimResults = true;
-    let finalText = "";
 
     rec.onstart = () => {
       state.recognizing = true;
       state.lastUserStart = Date.now();
-      finalText = "";
-      setStatus("listening");
-      el.btnMic.classList.add("listening");
-      el.micLabel.textContent = "⏹ Stopp";
     };
     rec.onresult = (event) => {
-      let interim = "";
+      currentInterim = "";
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const r = event.results[i];
-        if (r.isFinal) finalText += r[0].transcript + " ";
-        else interim += r[0].transcript;
+        if (r.isFinal) state.draft += r[0].transcript + " ";
+        else currentInterim += r[0].transcript;
       }
-      el.statusLine.textContent = "Ich höre zu … " + (finalText + interim).trim().slice(-80);
+      renderDraft();
     };
     rec.onerror = (e) => {
-      if (e.error === "no-speech") {
-        el.statusLine.textContent = "Ich habe nichts gehört – bitte erneut auf „Sprechen“ tippen.";
-      } else if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+        state.recording = false;
         el.statusLine.textContent = "Kein Mikrofonzugriff. Bitte in den Browsereinstellungen erlauben.";
       }
+      // "no-speech" ignorieren: onend startet ggf. neu, solange aufgenommen wird.
     };
     rec.onend = () => {
       state.recognizing = false;
-      el.btnMic.classList.remove("listening");
-      el.micLabel.textContent = "🎤 Sprechen";
       if (state.lastUserStart) {
         state.userSpeakingSec += (Date.now() - state.lastUserStart) / 1000;
         state.lastUserStart = null;
       }
-      const text = finalText.trim();
-      if (text) {
-        handleUserUtterance(text);
-      } else {
-        setStatus("idle");
+      // Abschicken wurde ausgelöst → jetzt (nach Finalisierung) senden.
+      if (state.pendingSend) {
+        state.pendingSend = false;
+        flushSend();
+        return;
+      }
+      // Erkennung im Aufnahmemodus unerwartet beendet → automatisch fortsetzen.
+      if (state.recording && !state.ended) {
+        try { rec.start(); } catch (_) { /* Neustart folgt beim nächsten Tick */ }
       }
     };
     return rec;
   }
 
-  function toggleMic() {
-    if (!recognition) {
-      // Kein STT: Text-Fallback per Prompt
-      const typed = window.prompt("Spracherkennung ist in diesem Browser nicht verfügbar. Bitte tippen Sie Ihre Antwort:");
-      if (typed) handleUserUtterance(typed);
-      return;
-    }
+  // Zeigt den bisher erkannten Text im editierbaren Aufnahme-Feld.
+  function renderDraft() {
     if (state.recognizing) {
+      el.draftText.value = (state.draft + currentInterim).replace(/\s+/g, " ").trimStart();
+    }
+    const hasText = el.draftText.value.trim().length > 0;
+    el.btnSend.disabled = !hasText;
+    el.statusLine.textContent = state.recording
+      ? "Aufnahme läuft … Sie bestimmen, wann Sie fertig sind."
+      : "Aufnahme pausiert – „Abschicken“ oder erneut aufnehmen.";
+  }
+
+  // ---------- Aufnahme-Steuerung ----------
+  function startRecording() {
+    if (state.ended) return;
+    stopSpeaking();                 // Coach soll nicht in die Aufnahme sprechen
+    state.recording = true;
+    setStatus("listening");
+    el.draftBox.hidden = false;
+    el.btnRecord.classList.add("recording");
+    el.recordLabel.textContent = "⏸ Aufnahme pausieren";
+    if (recognition) {
+      try { recognition.start(); } catch (_) { /* läuft bereits */ }
+      renderDraft();
+    } else {
+      // Kein STT im Browser → reine Texteingabe.
+      el.draftText.removeAttribute("readonly");
+      el.draftText.focus();
+      el.statusLine.textContent = "Bitte tippen Sie Ihren Beitrag und klicken Sie auf „Abschicken“.";
+    }
+  }
+
+  function pauseRecording() {
+    state.recording = false;
+    el.btnRecord.classList.remove("recording");
+    el.recordLabel.textContent = "🎤 Aufnahme fortsetzen";
+    if (recognition && state.recognizing) recognition.stop();
+    setStatus("idle");
+    renderDraft();
+  }
+
+  function toggleRecord() {
+    if (state.recording) pauseRecording();
+    else startRecording();
+  }
+
+  // Beitrag abschicken: Aufnahme sauber beenden, dann an die KI übergeben.
+  function sendDraft() {
+    if (el.btnSend.disabled) return;
+    state.recording = false;
+    el.btnRecord.classList.remove("recording");
+    el.recordLabel.textContent = "🎤 Aufnahme starten";
+    if (recognition && state.recognizing) {
+      state.pendingSend = true;   // flushSend läuft in rec.onend nach Finalisierung
       recognition.stop();
     } else {
-      stopSpeaking();
-      try { recognition.start(); } catch (_) { /* bereits laufend */ }
+      flushSend();
+    }
+  }
+
+  function flushSend() {
+    const text = el.draftText.value.trim();
+    // Feld zurücksetzen
+    state.draft = "";
+    currentInterim = "";
+    el.draftText.value = "";
+    el.draftBox.hidden = true;
+    el.btnSend.disabled = true;
+    if (text) {
+      handleUserUtterance(text);
+    } else {
+      setStatus("idle");
+      if (!state.ended) el.btnRecord.disabled = false;
     }
   }
 
@@ -360,11 +428,15 @@
   async function endConversation() {
     if (state.ended) return;
     state.ended = true;
+    state.recording = false;
+    state.pendingSend = false;
     if (state.recognizing && recognition) recognition.stop();
     stopSpeaking();
     clearInterval(state.timerId);
-    el.btnMic.disabled = true;
+    el.btnRecord.disabled = true;
+    el.btnSend.disabled = true;
     el.btnEnd.disabled = true;
+    el.draftBox.hidden = true;
 
     // Kurzer Abschluss durch den Coach (kein weiteres Warten auf Nutzer)
     setStatus("thinking");
@@ -534,8 +606,14 @@
       el.btnStart.disabled = false;
     });
   });
-  el.btnMic.addEventListener("click", toggleMic);
+  el.btnRecord.addEventListener("click", toggleRecord);
+  el.btnSend.addEventListener("click", sendDraft);
   el.btnEnd.addEventListener("click", endConversation);
+  // Manuelle Korrekturen im Aufnahme-Feld aktivieren den Abschicken-Button.
+  el.draftText.addEventListener("input", () => {
+    if (!state.recognizing) state.draft = el.draftText.value;
+    el.btnSend.disabled = el.draftText.value.trim().length === 0;
+  });
   el.toggleTranscript.addEventListener("change", (e) => {
     el.liveTranscript.hidden = !e.target.checked;
   });

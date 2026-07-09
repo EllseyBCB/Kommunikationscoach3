@@ -81,22 +81,30 @@
         <div class="status-line" id="status-line">Bereit …</div>
       </div>
 
+      <div class="draft-box" id="draft-box" hidden>
+        <div class="draft-label">✍️ Ihre Aufnahme <span class="draft-hint">(Sie können den Text vor dem Abschicken noch korrigieren)</span></div>
+        <textarea id="draft-text" rows="3" placeholder="Sobald Sie die Aufnahme starten, erscheint hier Ihr gesprochener Text …"></textarea>
+      </div>
+
+      <div class="conv-controls">
+        <button id="btn-record" class="btn btn-round" title="Aufnahme">
+          <span id="record-label">🎤 Aufnahme starten</span>
+        </button>
+        <button id="btn-send" class="btn btn-primary" disabled>➤ Abschicken</button>
+      </div>
+      <div class="conv-controls secondary-row">
+        <button id="btn-end" class="btn btn-secondary" disabled>Gespräch beenden</button>
+      </div>
+      <p class="conv-hint" id="conv-hint">So funktioniert's: <strong>Aufnahme starten</strong> → sprechen Sie in Ruhe, so lange Sie möchten → mit <strong>Abschicken</strong> geht Ihr Beitrag an den SprachCoach. Erst dann antwortet er – so fällt er Ihnen nie ins Wort. Der Beenden-Button wird nach 5 Minuten aktiv.</p>
+
       <div class="transcript-toggle">
         <label class="switch">
           <input type="checkbox" id="toggle-transcript" />
-          <span>Live-Transkription einblenden</span>
+          <span>Gesprächsverlauf einblenden</span>
         </label>
       </div>
 
       <div class="live-transcript" id="live-transcript" hidden></div>
-
-      <div class="conv-controls">
-        <button id="btn-mic" class="btn btn-round" title="Mikrofon">
-          <span id="mic-label">🎤 Sprechen</span>
-        </button>
-        <button id="btn-end" class="btn btn-secondary" disabled>Gespräch beenden</button>
-      </div>
-      <p class="conv-hint" id="conv-hint">Das Gespräch muss mindestens 5 Minuten dauern. Der Beenden-Button wird danach aktiv.</p>
     </section>
 
     <!-- ======================== ANALYSE / ERGEBNIS ======================== -->
