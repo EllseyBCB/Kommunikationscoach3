@@ -135,6 +135,16 @@ async function callAnthropic({ model, system, messages, maxTokens, temperature }
     err.code = "NO_API_KEY";
     throw err;
   }
+  const payload = {
+    model,
+    max_tokens: maxTokens,
+    system,
+    messages,
+  };
+  // temperature nur senden, wenn ausdrücklich gesetzt – neuere Modelle
+  // (z. B. claude-sonnet-5) lehnen den Parameter mit HTTP 400 ab.
+  if (typeof temperature === "number") payload.temperature = temperature;
+
   const res = await fetch(ANTHROPIC_API_URL, {
     method: "POST",
     headers: {
@@ -142,13 +152,7 @@ async function callAnthropic({ model, system, messages, maxTokens, temperature }
       "x-api-key": ANTHROPIC_API_KEY,
       "anthropic-version": ANTHROPIC_VERSION,
     },
-    body: JSON.stringify({
-      model,
-      max_tokens: maxTokens,
-      temperature,
-      system,
-      messages,
-    }),
+    body: JSON.stringify(payload),
   });
 
   if (!res.ok) {
@@ -213,10 +217,11 @@ app.post("/api/chat", async (req, res) => {
       model: CHAT_MODEL,
       system: systemPrompt,
       messages: safeMessages,
-      maxTokens: 400,
-      temperature: 0.8,
+      maxTokens: 600,
     });
-    res.json({ reply: text.trim(), source: "ai" });
+    const reply = (text || "").trim();
+    if (!reply) throw new Error("Leere Antwort vom Modell.");
+    res.json({ reply, source: "ai" });
   } catch (e) {
     if (e.code === "NO_API_KEY") {
       // Regelbasierter Fallback: nächste Frage anhand der Anzahl bisheriger KI-Antworten
@@ -242,8 +247,7 @@ app.post("/api/analyze", async (req, res) => {
       model: ANALYSIS_MODEL,
       system: ANALYSIS_SYSTEM_PROMPT,
       messages: [{ role: "user", content: userContent }],
-      maxTokens: 4000,
-      temperature: 0.4,
+      maxTokens: 8000,
     });
 
     const analysis = extractJson(text);
