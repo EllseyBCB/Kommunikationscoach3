@@ -82,6 +82,7 @@ GESPRÄCHSPHASEN:
 3. Abschluss: Wenn dir signalisiert wird, dass das Gespräch endet, leite höflich zum Abschluss über und danke.
 
 WICHTIG:
+- Die Begrüßung ist bereits erfolgt. Du hast den Nutzer bereits gefragt, was er beruflich macht und was ihn zu dieser Sprachanalyse führt. Die erste Nutzer-Nachricht ist die Antwort darauf. Begrüße NICHT erneut und stelle dich nicht noch einmal vor – führe das Gespräch inhaltlich fort und knüpfe an die letzte Aussage des Nutzers an.
 - Antworte ausschließlich mit deiner nächsten gesprochenen Gesprächsantwort (Text, der vorgelesen wird).
 - Keine Meta-Kommentare, keine Bühnenanweisungen, keine Aufzählungszeichen. Nur natürliche gesprochene Sprache.`;
 
@@ -178,9 +179,31 @@ const FALLBACK_QUESTIONS = [
   "Wir kommen langsam zum Ende. Was nehmen Sie aus unserem Gespräch heute für sich mit?",
 ];
 
+// Anthropic verlangt: nicht-leerer Verlauf, der mit einer "user"-Nachricht
+// beginnt. Führende Assistenten-Nachrichten entfernen und Inhalte normalisieren.
+function sanitizeMessages(messages) {
+  const cleaned = (Array.isArray(messages) ? messages : [])
+    .filter((m) => m && typeof m.content === "string" && m.content.trim())
+    .map((m) => ({
+      role: m.role === "assistant" ? "assistant" : "user",
+      content: m.content,
+    }));
+  while (cleaned.length && cleaned[0].role !== "user") cleaned.shift();
+  return cleaned;
+}
+
 app.post("/api/chat", async (req, res) => {
   const { messages = [], phase = "main" } = req.body || {};
   try {
+    const safeMessages = sanitizeMessages(messages);
+    if (!safeMessages.length) {
+      // Kein gültiger Verlauf (z. B. ganz zu Beginn) → neutrale Rückfrage.
+      return res.json({
+        reply:
+          "Erzählen Sie mir gern zum Einstieg kurz, was Sie beruflich machen und was Sie heute zu dieser Sprachanalyse führt.",
+        source: "fallback",
+      });
+    }
     let systemPrompt = CONVERSATION_SYSTEM_PROMPT;
     if (phase === "closing") {
       systemPrompt +=
@@ -189,7 +212,7 @@ app.post("/api/chat", async (req, res) => {
     const text = await callAnthropic({
       model: CHAT_MODEL,
       system: systemPrompt,
-      messages,
+      messages: safeMessages,
       maxTokens: 400,
       temperature: 0.8,
     });

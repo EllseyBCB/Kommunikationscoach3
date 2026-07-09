@@ -228,24 +228,56 @@
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   }
 
+  // Feste, deterministische Eröffnung – erklärt Ablauf, Bedienung und Einstiegsthema.
+  const INTRO_MESSAGE =
+    "Herzlich willkommen bei D+J Consult! Ich bin Ihr persönlicher SprachCoach. " +
+    "Wir führen jetzt gemeinsam ein lockeres Gespräch von etwa fünf Minuten – ganz natürlich, wie mit einem echten Gesprächspartner. " +
+    "Anschließend werte ich Ihre Sprachkompetenz aus und gebe Ihnen konkrete Tipps. " +
+    "Und so bedienen Sie das Ganze: Tippen Sie auf „Aufnahme starten“, sprechen Sie in Ruhe und so lange Sie möchten – auch Denkpausen sind kein Problem – und schicken Sie Ihren Beitrag erst dann mit „Abschicken“ ab. Erst danach antworte ich Ihnen, ich falle Ihnen also nie ins Wort. " +
+    "Lassen Sie uns direkt beginnen: Erzählen Sie mir doch zum Einstieg kurz, was Sie beruflich machen – und was Sie heute zu dieser Sprachanalyse führt.";
+
   // ===================================================================
   //  Gesprächsfluss
   // ===================================================================
+  // Eröffnung: fester Begrüßungstext, ohne KI-Aufruf – der Einstieg ist so
+  // immer korrekt, verständlich und unabhängig von der API-Verfügbarkeit.
+  async function coachIntro() {
+    el.btnRecord.disabled = true;
+    el.btnSend.disabled = true;
+    // Nur anzeigen/vorlesen – NICHT in den API-Verlauf legen, damit dieser
+    // (wie von der Anthropic-API verlangt) mit der ersten Nutzer-Nachricht beginnt.
+    addTurn("coach", INTRO_MESSAGE);
+    await speak(INTRO_MESSAGE);
+    setStatus("idle");
+    if (!state.ended) {
+      el.btnRecord.disabled = false;
+      el.statusLine.textContent = "Sie sind dran – tippen Sie auf „Aufnahme starten“.";
+    }
+  }
+
   async function coachTurn(phase) {
     setStatus("thinking");
     el.btnRecord.disabled = true;
     el.btnSend.disabled = true;
-    let reply;
+    let reply = "";
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ messages: state.messages, phase: phase || "main" }),
       });
-      const data = await res.json();
-      reply = data.reply || "Entschuldigung, könnten Sie das bitte wiederholen?";
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.reply) {
+        reply = data.reply;
+      } else {
+        // API nicht verfügbar/Fehler: Gespräch mit neutraler Rückfrage am Laufen halten.
+        reply =
+          "Danke, das ist ein spannender Punkt. Können Sie das an einem konkreten Beispiel etwas genauer ausführen?";
+        console.warn("chat API nicht ok:", res.status, data && data.error);
+      }
     } catch (e) {
-      reply = "Es scheint eine kurze technische Unterbrechung gegeben zu haben. Wo waren wir gerade?";
+      reply =
+        "Danke für Ihre Ausführung. Erzählen Sie mir gern noch etwas mehr dazu – was war Ihnen dabei besonders wichtig?";
     }
     state.messages.push({ role: "assistant", content: reply });
     addTurn("coach", reply);
@@ -421,8 +453,8 @@
     showView("conversation");
     startTimer();
     setStatus("idle");
-    // Coach beginnt (Warm-up)
-    await coachTurn("warmup");
+    // Coach beginnt mit fester, verständlicher Eröffnung (kein KI-Aufruf).
+    await coachIntro();
   }
 
   async function endConversation() {
