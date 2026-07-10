@@ -502,38 +502,66 @@
     };
   }
 
-  async function goToAnalysis() {
+  function goToAnalysis() {
     showView("analysis");
+    // Transkript + Metriken einmal festhalten, damit ein erneuter Versuch
+    // dieselben Daten verwendet.
+    state.analysisTranscript = state.turns
+      .map((t) => `${t.who === "coach" ? "SprachCoach" : "Nutzer"}: ${t.text}`)
+      .join("\n");
+    state.analysisMetrics = computeMetrics();
+    runAnalysis();
+  }
+
+  async function runAnalysis() {
     el.analysisLoading.hidden = false;
     el.analysisError.hidden = true;
     el.analysisContent.hidden = true;
     el.analysisFooter.hidden = true;
 
-    const transcript = state.turns
-      .map((t) => `${t.who === "coach" ? "SprachCoach" : "Nutzer"}: ${t.text}`)
-      .join("\n");
-    const metrics = computeMetrics();
+    // Bis zu ~3 Minuten zulassen – die Auswertung ist umfangreich.
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 180000);
 
     try {
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ transcript, metrics }),
+        body: JSON.stringify({
+          transcript: state.analysisTranscript,
+          metrics: state.analysisMetrics,
+        }),
+        signal: controller.signal,
       });
+      clearTimeout(timeout);
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || `Fehler ${res.status}`);
       }
       const data = await res.json();
-      renderAnalysis(data.analysis, metrics);
+      if (!data.analysis) throw new Error("Die Analyse kam unvollständig zurück.");
+      renderAnalysis(data.analysis, state.analysisMetrics);
     } catch (e) {
-      el.analysisLoading.hidden = true;
-      el.analysisError.hidden = false;
-      el.analysisError.innerHTML =
-        `<h2>Analyse nicht möglich</h2><p>${escapeHtml(e.message)}</p>` +
-        `<p style="margin-top:10px;color:#666">Hinweis: Für die KI-Analyse muss auf dem Server die Umgebungsvariable <code>ANTHROPIC_API_KEY</code> gesetzt sein.</p>`;
-      el.analysisFooter.hidden = false;
+      clearTimeout(timeout);
+      const msg =
+        e.name === "AbortError"
+          ? "Die Analyse hat zu lange gedauert. Bitte versuchen Sie es erneut."
+          : e.message;
+      showAnalysisError(msg);
     }
+  }
+
+  function showAnalysisError(message) {
+    el.analysisLoading.hidden = true;
+    el.analysisContent.hidden = true;
+    el.analysisError.hidden = false;
+    el.analysisError.innerHTML =
+      `<h2>Analyse konnte nicht abgeschlossen werden</h2>` +
+      `<p>${escapeHtml(message)}</p>` +
+      `<button id="btn-retry" class="btn btn-primary" style="margin-top:18px">🔄 Analyse erneut starten</button>`;
+    el.analysisFooter.hidden = false;
+    const retry = document.getElementById("btn-retry");
+    if (retry) retry.addEventListener("click", runAnalysis);
   }
 
   function bar(pct) {

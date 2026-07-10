@@ -124,7 +124,13 @@ Antworte AUSSCHLIESSLICH mit gültigem JSON (kein Markdown, keine Code-Fences) i
   "naechsteSchritte": ["<konkrete Empfehlung 1>", "<2>", "<3>"]
 }
 
-Alle 7 Dimensionen müssen enthalten sein. Belege Stärken und Entwicklungsfelder mit konkreten Bezügen/Zitaten aus dem Transkript. Sei präzise, professionell und ermutigend.`;
+Alle 7 Dimensionen müssen enthalten sein. Belege Stärken und Entwicklungsfelder mit konkreten Bezügen/Zitaten aus dem Transkript. Sei präzise, professionell und ermutigend.
+
+FORMATVORGABEN (unbedingt einhalten, damit die Antwort schnell und vollständig bleibt):
+- Pro Dimension: genau 2 Stärken, genau 2 Entwicklungsfelder, genau 2 Tipps.
+- Jeder einzelne Textwert ist KURZ: höchstens ein bis zwei Sätze.
+- "zusammenfassung": 2 Sätze. "topStaerken": 3 Einträge. "prioritaereEntwicklungsfelder": 2 Einträge. "naechsteSchritte": 3 Einträge.
+- Gib NUR das JSON aus, keinerlei Text davor oder danach, keine Code-Fences.`;
 
 // ----------------------------------------------------------------------------
 // Anthropic-Aufruf
